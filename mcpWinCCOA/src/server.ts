@@ -127,14 +127,7 @@ export async function initializeServer(): Promise<McpServer> {
     console.log('🔄 Creating MCP server instance...');
     const server = new McpServer({
       name: "WinCC OA Extended with CNS/UNS",
-      version: "3.0.0",
-      capabilities: {
-        resources: {
-          list: true,
-          read: true
-        },
-        tools: {}
-      }
+      version: "3.0.0"
     });
     console.log('✅ MCP server instance created');
 
