@@ -95,6 +95,33 @@ interface DpTypeNode {
 }
 
 /**
+ * Build a Zod schema for a DPT node element with explicit nesting depth.
+ * The deepest level uses .passthrough() to allow further nesting at runtime.
+ * @param depth - Number of nesting levels to explicitly define (default: 5)
+ * @returns Zod schema for a DPT node element
+ */
+function buildDpTypeNodeSchema(depth: number = 5): z.ZodTypeAny {
+  // Deepest level: no explicit children, passthrough allows runtime nesting beyond schema depth
+  let schema: z.ZodTypeAny = z.object({
+    name: z.string().describe("Element name"),
+    type: z.string().describe("Element type (e.g., Struct, Int, Float, Bool, String)"),
+    refName: z.string().optional().describe("Reference type name for Typeref elements"),
+  }).passthrough();
+
+  // Build from inside out: each level wraps the inner level as its children
+  for (let i = 0; i < depth; i++) {
+    schema = z.object({
+      name: z.string().describe("Element name"),
+      type: z.string().describe("Element type (e.g., Struct, Int, Float, Bool, String)"),
+      refName: z.string().optional().describe("Reference type name for Typeref elements"),
+      children: z.array(schema).optional().describe("Array of child elements (for Struct types, supports nesting)")
+    }).passthrough();
+  }
+
+  return schema;
+}
+
+/**
  * Convert a JSON structure to WinccoaDpTypeNode tree
  * @param jsonNode - JSON node definition
  * @returns WinccoaDpTypeNode-compatible object
@@ -198,6 +225,41 @@ Example - Complex Type with Typeref:
   }
 }
 
+Example - Deeply Nested Type (3+ levels):
+{
+  "typeName": "BuildingAutomation",
+  "structure": {
+    "name": "BuildingAutomation",
+    "type": "Struct",
+    "children": [
+      {
+        "name": "hvac",
+        "type": "Struct",
+        "children": [
+          {
+            "name": "zone1",
+            "type": "Struct",
+            "children": [
+              { "name": "temperature", "type": "Float" },
+              { "name": "humidity", "type": "Float" },
+              { "name": "setpoint", "type": "Float" }
+            ]
+          },
+          {
+            "name": "zone2",
+            "type": "Struct",
+            "children": [
+              { "name": "temperature", "type": "Float" },
+              { "name": "humidity", "type": "Float" }
+            ]
+          }
+        ]
+      },
+      { "name": "alarmActive", "type": "Bool" }
+    ]
+  }
+}
+
 Returns: Success confirmation with datapoint type details or error message.
 
 Throws WinccoaError if:
@@ -208,18 +270,8 @@ Throws WinccoaError if:
 - Reference type (refName) does not exist`,
     {
       typeName: z.string().min(1, "typeName must be a non-empty string"),
-      structure: z.object({
-        name: z.string().describe("Element name"),
-        type: z.string().describe("Element type (e.g., Struct, Int, Float, Bool, String)"),
-        refName: z.string().optional().describe("Reference type name for Typeref elements"),
-        children: z.array(
-          z.object({
-            name: z.string().describe("Child element name"),
-            type: z.string().describe("Child element type"),
-            refName: z.string().optional().describe("Reference type name")
-          }).passthrough()
-        ).optional().describe("Array of child elements (supports arbitrary nesting via passthrough)")
-      }).passthrough()
+      structure: buildDpTypeNodeSchema(5)
+        .describe("JSON object defining the type structure tree (root node with nested children)")
     },
     async ({ typeName, structure }: { typeName: string; structure: JsonDpTypeNode }) => {
       try {
